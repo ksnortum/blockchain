@@ -1,15 +1,18 @@
 package blockchain;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class Blockchain {
+public final class Blockchain implements Serializable {
 
-    private class Block {
+    final class Block implements Serializable {
+        private static final long serialVersionUID = 1L;
         private final long id;
         private final long timestamp;
+        private final long magicNumber;
         private final String previousHash;
         private final String hash;
 
@@ -17,7 +20,11 @@ public class Blockchain {
             id = nextId.getAndIncrement();
             timestamp = new Date().getTime();
             this.previousHash = previousHash;
-            hash = StringUtil.applySha256("" + id + timestamp + previousHash);
+            HashCreator.MagicNumberAndHash magicNumberAndHash =
+                    HashCreator.createHashWithNumberOfZeros(numberOfZeros, String.valueOf(id),
+                            String.valueOf(timestamp), previousHash);
+            magicNumber = magicNumberAndHash.getMagicNumber();
+            hash = magicNumberAndHash.getHash();
         }
 
         String getHash() {
@@ -33,30 +40,45 @@ public class Blockchain {
             return String.format("Block:%n" +
                     "Id: %d%n" +
                     "Timestamp: %d%n" +
+                    "Magic number: %d%n" +
                     "Hash of the previous block:%n" +
                     "%s%n" +
                     "Hash of the block:%n" +
-                    "%s%n", id, timestamp, previousHash, hash);
+                    "%s%n", id, timestamp, magicNumber, previousHash, hash);
         }
     }
 
+    private static final long serialVersionUID = 1L;
     private final AtomicLong nextId = new AtomicLong(1);
-    private final List<Block> blocks = new ArrayList<>();
+    private final List<Block> chain = new ArrayList<>();
+    private final int numberOfZeros;
 
-    void newBlock() {
-        String previousHash = blocks.isEmpty() ? "0" : blocks.get(blocks.size() - 1).getHash();
-        blocks.add(new Block(previousHash));
+    Blockchain(int numberOfZeros) {
+        if (numberOfZeros < 0) {
+            System.out.println("Number of zeros cannot be negative; using 0");
+            numberOfZeros = 0;
+        }
+
+        this.numberOfZeros = numberOfZeros;
+    }
+
+    Block newBlock() {
+        String previousHash = chain.isEmpty() ? "0" : chain.get(chain.size() - 1).getHash();
+        Block block = new Block(previousHash);
+        chain.add(block);
+
+        return block;
     }
 
     boolean validate() {
-        if (blocks.isEmpty()) {
+        if (chain.isEmpty()) {
             return true;
         }
 
-        for (int index = blocks.size() - 1; index >= 0; index--) {
+        for (int index = chain.size() - 1; index >= 0; index--) {
             if (index == 0) {
-                return "0".equals(blocks.get(0).getPreviousHash());
-            } else if (!blocks.get(index - 1).getHash().equals(blocks.get(index).getPreviousHash())) {
+                return "0".equals(chain.get(0).getPreviousHash());
+            } else if (!chain.get(index - 1).getHash().equals(chain.get(index).getPreviousHash())) {
                 return false;
             }
         }
@@ -64,7 +86,12 @@ public class Blockchain {
         return true; // should never get here, non-empty lists have a zero index
     }
 
-    void print(int noOfBlocks) {
-        blocks.stream().limit(noOfBlocks).forEach(System.out::println);
+    void printFirst(int noOfBlocks) {
+        chain.stream().limit(noOfBlocks).forEach(System.out::println);
     }
+
+    void printAll() {
+        chain.forEach(System.out::println);
+    }
+
 }

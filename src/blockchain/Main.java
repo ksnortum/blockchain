@@ -1,16 +1,51 @@
 package blockchain;
 
-import java.util.stream.IntStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Scanner;
 
 public class Main {
+    private static final String FILE_NAME = "blockchain.bin";
+
     public static void main(String[] args) {
-        Blockchain blockchain = new Blockchain();
-        IntStream.range(0, 10).forEach(index -> blockchain.newBlock());
+        Blockchain blockchain;
 
-        if (!blockchain.validate()) {
-            System.out.println("Blockchain did not validate");
+//        if (Files.exists(Paths.get(FILE_NAME))) {
+//            blockchain = (Blockchain) SerializationUtils.deserialize(FILE_NAME);
+//
+//            if (blockchain.validate()) {
+//                blockchain.printAll();
+//            } else {
+//                System.out.println("Blockchain did not validate");
+//                blockchain = new Blockchain(getNumberOfZeros());
+//            }
+//        } else {
+            blockchain = new Blockchain(getNumberOfZeros());
+//        }
+
+        for (int i = 0; i < 5; i++) {
+            long startTime = System.currentTimeMillis();
+            Blockchain.Block block = blockchain.newBlock();
+            long endTime = System.currentTimeMillis();
+            System.out.print(block);
+            System.out.printf("Block was generating for %d seconds%n%n", (endTime - startTime) / 1000);
+            SerializationUtils.serialize(blockchain, FILE_NAME);
         }
+    }
 
-        blockchain.print(5);
+    private static int getNumberOfZeros() {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter how many zeros the hash must start with: ");
+        int numberOfZeros;
+
+        do {
+            while (!scanner.hasNextInt()) {
+                scanner.next();
+            }
+
+            numberOfZeros = scanner.nextInt();
+        } while (numberOfZeros < 0);
+
+        return numberOfZeros;
     }
 }
