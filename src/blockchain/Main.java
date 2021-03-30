@@ -24,13 +24,11 @@ public class Main {
 //        }
 
         for (int i = 0; i < 5; i++) {
-            long startTime = System.currentTimeMillis();
-            Blockchain.Block block = blockchain.newBlock();
-            long endTime = System.currentTimeMillis();
-            System.out.print(block);
-            System.out.printf("Block was generating for %d seconds%n%n", (endTime - startTime) / 1000);
+            blockchain.newBlock();
             SerializationUtils.serialize(blockchain, FILE_NAME);
         }
+
+        blockchain.printFirst(5);
     }
 
     private static int getNumberOfZeros() {

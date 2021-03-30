@@ -1,6 +1,7 @@
 package blockchain;
 
 import java.io.Serializable;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -12,19 +13,18 @@ public final class Blockchain implements Serializable {
         private static final long serialVersionUID = 1L;
         private final long id;
         private final long timestamp;
-        private final long magicNumber;
+        private long magicNumber;
         private final String previousHash;
-        private final String hash;
+        private String hash;
+        private final long timeGenerating;
 
         Block(String previousHash) {
             id = nextId.getAndIncrement();
             timestamp = new Date().getTime();
             this.previousHash = previousHash;
-            HashCreator.MagicNumberAndHash magicNumberAndHash =
-                    HashCreator.createHashWithNumberOfZeros(numberOfZeros, String.valueOf(id),
-                            String.valueOf(timestamp), previousHash);
-            magicNumber = magicNumberAndHash.getMagicNumber();
-            hash = magicNumberAndHash.getHash();
+            long startTime = System.currentTimeMillis();
+            createHashWithNumberOfZeros();
+            timeGenerating = (System.currentTimeMillis() - startTime) / 1000;
         }
 
         String getHash() {
@@ -33,6 +33,22 @@ public final class Blockchain implements Serializable {
 
         String getPreviousHash() {
             return previousHash;
+        }
+
+        private void createHashWithNumberOfZeros() {
+            String stringToHash = "" + id + timestamp + previousHash;
+            SecureRandom random = new SecureRandom();
+
+            do {
+                magicNumber = random.nextLong();
+                hash = StringUtil.applySha256(stringToHash + magicNumber);
+            } while (!doesHashStartWithNumberOfZeros());
+        }
+
+        private boolean doesHashStartWithNumberOfZeros() {
+            String zeros = "0".repeat(Math.max(0, numberOfZeros));
+
+            return hash.startsWith(zeros);
         }
 
         @Override
@@ -44,7 +60,9 @@ public final class Blockchain implements Serializable {
                     "Hash of the previous block:%n" +
                     "%s%n" +
                     "Hash of the block:%n" +
-                    "%s%n", id, timestamp, magicNumber, previousHash, hash);
+                    "%s%n" +
+                    "Block was generating for %d seconds%n",
+                    id, timestamp, magicNumber, previousHash, hash, timeGenerating);
         }
     }
 
@@ -62,12 +80,10 @@ public final class Blockchain implements Serializable {
         this.numberOfZeros = numberOfZeros;
     }
 
-    Block newBlock() {
+    void newBlock() {
         String previousHash = chain.isEmpty() ? "0" : chain.get(chain.size() - 1).getHash();
         Block block = new Block(previousHash);
         chain.add(block);
-
-        return block;
     }
 
     boolean validate() {
