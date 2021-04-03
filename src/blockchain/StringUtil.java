@@ -30,4 +30,10 @@ class StringUtil {
             throw new RuntimeException(e);
         }
     }
+
+    public static boolean doesStringStartWithNumberOfZeros(String str, int numberOfZeros) {
+        String zeros = "0".repeat(Math.max(0, numberOfZeros));
+
+        return str.startsWith(zeros);
+    }
 }

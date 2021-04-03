@@ -1,30 +1,35 @@
 package blockchain;
 
 import java.io.Serializable;
-import java.security.SecureRandom;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
 
 public final class Blockchain implements Serializable {
 
-    final class Block implements Serializable {
-        private static final long serialVersionUID = 1L;
+    static final class Block implements Serializable {
+        private static final long serialVersionUID = 2L;
+
         private final long id;
         private final long timestamp;
-        private long magicNumber;
+        private final long magicNumber;
         private final String previousHash;
-        private String hash;
+        private final String hash;
         private final long timeGenerating;
+        private final long minerNumber;
 
-        Block(String previousHash) {
-            id = nextId.getAndIncrement();
-            timestamp = new Date().getTime();
+        Block(long id, long timestamp, long magicNumber, String previousHash, String hash, long timeGenerating,
+              long minerNumber) {
+            this.id = id;
+            this.timestamp = timestamp;
+            this.magicNumber = magicNumber;
             this.previousHash = previousHash;
-            long startTime = System.currentTimeMillis();
-            createHashWithNumberOfZeros();
-            timeGenerating = (System.currentTimeMillis() - startTime) / 1000;
+            this.hash = hash;
+            this.timeGenerating = timeGenerating;
+            this.minerNumber = minerNumber;
+        }
+
+        long getId() {
+            return id;
         }
 
         String getHash() {
@@ -35,25 +40,14 @@ public final class Blockchain implements Serializable {
             return previousHash;
         }
 
-        private void createHashWithNumberOfZeros() {
-            String stringToHash = "" + id + timestamp + previousHash;
-            SecureRandom random = new SecureRandom();
-
-            do {
-                magicNumber = random.nextLong();
-                hash = StringUtil.applySha256(stringToHash + magicNumber);
-            } while (!doesHashStartWithNumberOfZeros());
-        }
-
-        private boolean doesHashStartWithNumberOfZeros() {
-            String zeros = "0".repeat(Math.max(0, numberOfZeros));
-
-            return hash.startsWith(zeros);
+        long getTimeGenerating() {
+            return timeGenerating;
         }
 
         @Override
         public String toString() {
             return String.format("Block:%n" +
+                    "Created by miner # %d%n" +
                     "Id: %d%n" +
                     "Timestamp: %d%n" +
                     "Magic number: %d%n" +
@@ -61,17 +55,20 @@ public final class Blockchain implements Serializable {
                     "%s%n" +
                     "Hash of the block:%n" +
                     "%s%n" +
-                    "Block was generating for %d seconds%n",
-                    id, timestamp, magicNumber, previousHash, hash, timeGenerating);
+                    "Block was generating for %d seconds",
+                    minerNumber, id, timestamp, magicNumber, previousHash, hash, timeGenerating);
         }
     }
 
-    private static final long serialVersionUID = 1L;
-    private final AtomicLong nextId = new AtomicLong(1);
+    private static final long serialVersionUID = 2L;
     private final List<Block> chain = new ArrayList<>();
-    private final int numberOfZeros;
+    private int numberOfZeros = 0;
 
-    Blockchain(int numberOfZeros) {
+    synchronized int getNumberOfZeros() {
+        return numberOfZeros;
+    }
+
+    void setNumberOfZeros(int numberOfZeros) {
         if (numberOfZeros < 0) {
             System.out.println("Number of zeros cannot be negative; using 0");
             numberOfZeros = 0;
@@ -80,10 +77,32 @@ public final class Blockchain implements Serializable {
         this.numberOfZeros = numberOfZeros;
     }
 
-    void newBlock() {
-        String previousHash = chain.isEmpty() ? "0" : chain.get(chain.size() - 1).getHash();
-        Block block = new Block(previousHash);
+    void incrementNumberOfZeros() {
+        numberOfZeros++;
+    }
+
+    void decrementNumberOfZeros() {
+        numberOfZeros = Math.max(0, --numberOfZeros);
+    }
+
+    int getSize() {
+        return chain.size();
+    }
+
+    void addBlockToChain(Block block) {
         chain.add(block);
+    }
+
+    Block getLastBlock() {
+        return chain.get(chain.size() - 1);
+    }
+
+    synchronized String getLastHash() {
+        return chain.isEmpty() ? "0" : getLastBlock().getHash();
+    }
+
+    synchronized long getNextId() {
+        return chain.isEmpty() ? 1 : getLastBlock().getId() + 1;
     }
 
     boolean validate() {

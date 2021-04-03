@@ -18,6 +18,9 @@ public class SerializationUtils {
 
     /**
      * Deserialize to an object from the file
+     *
+     *         if (Files.exists(Paths.get(FILE_NAME))) {
+     *             blockchain = (Blockchain) SerializationUtils.deserialize(FILE_NAME);
      */
     public static Object deserialize(String fileName) {
         Object obj;
