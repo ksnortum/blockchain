@@ -1,7 +1,9 @@
 package blockchain;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.*;
 
 public class Miner {
@@ -9,23 +11,70 @@ public class Miner {
     private static final int MINIMUM_CHAIN_SIZE = 5;
     private static final int AWAIT_TERMINATION_TIMEOUT = 800;
     private static final int FUTURE_GET_TIMEOUT = 100;
+    private static final long MILLISECONDS_TO_WAIT_FOR_PENDING_MESSAGES = 300;
 
     private Blockchain blockchain;
 
     public void run() {
         blockchain = new Blockchain();
+        createFirstBlock();
         ExecutorService executorService = Executors.newFixedThreadPool(NUMBER_OF_TASKS);
+        executorService.execute(new UserMessageTask(blockchain));
+        List<Callable<Optional<MiningTaskRecord>>> callableTasks = new ArrayList<>();
 
-        while (blockchain.getSize() < MINIMUM_CHAIN_SIZE) {
-            List<Callable<Blockchain.Block>> callableTasks = new ArrayList<>();
-
-            for (int i = 0; i < NUMBER_OF_TASKS; i++) {
-                callableTasks.add(new MiningTask(blockchain));
-            }
-
-            invokeTasks(executorService, callableTasks);
+        for (int i = 0; i < NUMBER_OF_TASKS; i++) {
+            callableTasks.add(new MiningTask(blockchain));
         }
 
+        while (blockchain.getSize() <= MINIMUM_CHAIN_SIZE) {
+            List<Future<Optional<MiningTaskRecord>>> futures;
+
+            try {
+                futures = executorService.invokeAll(callableTasks);
+            } catch (InterruptedException e) {
+                break;
+            }
+
+            findFirstTaskWithValidData(futures);
+            stopAllTasks(futures);
+            createNextBlock();
+        }
+
+        shutdownExecutor(executorService);
+    }
+
+    private void createFirstBlock() {
+        long id = 1;
+        long timestamp = new Date().getTime();
+        String previousHash = "0";
+        List<String> messages = new ArrayList<>();
+        hashAndCreateBlock(id, timestamp, previousHash, messages);
+    }
+
+    private void createNextBlock() {
+        long id = blockchain.getNextId();
+        long timestamp = new Date().getTime();
+        String previousHash = blockchain.getLastHash();
+
+        while (!blockchain.isPendingMessages()) {
+            try {
+                TimeUnit.MILLISECONDS.sleep(MILLISECONDS_TO_WAIT_FOR_PENDING_MESSAGES);
+            } catch (InterruptedException e) {
+                return;
+            }
+        }
+
+        List<String> messages = blockchain.getAndClearPendingMessages();
+        hashAndCreateBlock(id, timestamp, previousHash, messages);
+    }
+
+    private void hashAndCreateBlock(long id, long timestamp, String previousHash, List<String> messages) {
+        String hash = StringUtil.applySha256(String.format("%s%s%s%s", id, timestamp, previousHash, messages));
+        Blockchain.Block firstBlock = new Blockchain.Block(id, timestamp, previousHash, hash, messages);
+        blockchain.addBlockToChain(firstBlock);
+    }
+
+    private void shutdownExecutor(ExecutorService executorService) {
         executorService.shutdown();
 
         try {
@@ -37,22 +86,13 @@ public class Miner {
         }
     }
 
-    private void invokeTasks(ExecutorService executorService, List<Callable<Blockchain.Block>> callableTasks) {
-        List<Future<Blockchain.Block>> futures;
-
-        try {
-            futures = executorService.invokeAll(callableTasks);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-            return;
-        }
-
+    private void findFirstTaskWithValidData(List<Future<Optional<MiningTaskRecord>>> futures) {
         boolean foundValidatedBlock = false;
 
         while (!foundValidatedBlock) {
             for (var future : futures) {
                 if (future.isDone()) {
-                    foundValidatedBlock = getAndValidateNewBlock(future);
+                    foundValidatedBlock = getAndValidateMiningTask(future);
 
                     if (foundValidatedBlock) {
                         break;
@@ -60,47 +100,61 @@ public class Miner {
                 }
             }
         }
-
-        stopAllTasks(futures);
     }
 
-    private boolean getAndValidateNewBlock(Future<Blockchain.Block> future) {
-        try {
-            Blockchain.Block newBlock = future.get(FUTURE_GET_TIMEOUT, TimeUnit.MILLISECONDS);
-            boolean isPreviousHashValid = newBlock.getPreviousHash().equals(blockchain.getLastHash());
-            boolean isHashStartsWithNumberOfZeros =
-                    StringUtil.doesStringStartWithNumberOfZeros(newBlock.getHash(), blockchain.getNumberOfZeros());
+    private boolean getAndValidateMiningTask(Future<Optional<MiningTaskRecord>> future) {
+        MiningTaskRecord record;
 
-            if (isPreviousHashValid && isHashStartsWithNumberOfZeros) {
-                blockchain.addBlockToChain(newBlock);
-            } else {
+        try {
+            Optional<MiningTaskRecord> recordOptional = future.get(FUTURE_GET_TIMEOUT, TimeUnit.MILLISECONDS);
+
+            if (recordOptional.isEmpty()) {
                 return false;
             }
 
-            System.out.println(newBlock);
-            long secondsGenerating = newBlock.getTimeGenerating();
-
-            if (secondsGenerating > 60) {
-                blockchain.decrementNumberOfZeros();
-                System.out.println("N was decreased by 1");
-            } else if (secondsGenerating < 6) {
-                blockchain.incrementNumberOfZeros();
-                System.out.println("N was increased to " + blockchain.getNumberOfZeros());
-            } else {
-                System.out.println("N stays the same");
-            }
-
-            System.out.println();
-
-            return true;
-        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            record = recordOptional.get();
+        } catch (InterruptedException | TimeoutException e) {
+            return false;
+        } catch (ExecutionException e) {
             e.printStackTrace();
+            return false;
         }
 
-        return false;
+        if (!StringUtil.doesStringStartWithNumberOfZeros(record.getHash(), blockchain.getNumberOfZeros())) {
+            return false;
+        }
+
+        createAndPrintLastBlock(record);
+        adjustNumberOfZeros(record);
+
+        return true;
     }
 
-    private void stopAllTasks(List<Future<Blockchain.Block>> futures) {
+    private void createAndPrintLastBlock(MiningTaskRecord record) {
+        Blockchain.Block lastBlock = blockchain.getLastBlock();
+        lastBlock.setMagicNumber(record.getMagicNumber());
+        lastBlock.setTimeGenerating(record.getTimeGenerating());
+        lastBlock.setMinerNumber(record.getMinerNumber());
+        System.out.println(lastBlock);
+    }
+
+    private void adjustNumberOfZeros(MiningTaskRecord record) {
+        long secondsGenerating = record.getTimeGenerating();
+
+        if (secondsGenerating > 60) {
+            blockchain.decrementNumberOfZeros();
+            System.out.println("N was decreased by 1");
+        } else if (secondsGenerating < 6) {
+            blockchain.incrementNumberOfZeros();
+            System.out.println("N was increased to " + blockchain.getNumberOfZeros());
+        } else {
+            System.out.println("N stays the same");
+        }
+
+        System.out.println();
+    }
+
+    private void stopAllTasks(List<Future<Optional<MiningTaskRecord>>> futures) {
         for (var future : futures) {
             if (!future.isDone()) {
                 future.cancel(true);

@@ -7,29 +7,31 @@ import java.util.List;
 public final class Blockchain implements Serializable {
 
     static final class Block implements Serializable {
-        private static final long serialVersionUID = 2L;
+        private static final long serialVersionUID = 3L;
 
         private final long id;
         private final long timestamp;
-        private final long magicNumber;
+        private long magicNumber;
         private final String previousHash;
         private final String hash;
-        private final long timeGenerating;
-        private final long minerNumber;
+        private long timeGenerating;
+        private long minerNumber;
+        private final List<String> messages;
 
-        Block(long id, long timestamp, long magicNumber, String previousHash, String hash, long timeGenerating,
-              long minerNumber) {
+        Block(long id, long timestamp, String previousHash, String hash, List<String> messages) {
             this.id = id;
             this.timestamp = timestamp;
-            this.magicNumber = magicNumber;
             this.previousHash = previousHash;
             this.hash = hash;
-            this.timeGenerating = timeGenerating;
-            this.minerNumber = minerNumber;
+            this.messages = messages;
         }
 
         long getId() {
             return id;
+        }
+
+        long getTimestamp() {
+            return timestamp;
         }
 
         String getHash() {
@@ -40,12 +42,32 @@ public final class Blockchain implements Serializable {
             return previousHash;
         }
 
-        long getTimeGenerating() {
-            return timeGenerating;
+        void setTimeGenerating(long timeGenerating) {
+            this.timeGenerating = timeGenerating;
+        }
+
+        void setMagicNumber(long magicNumber) {
+            this.magicNumber = magicNumber;
+        }
+
+        void setMinerNumber(long minerNumber) {
+            this.minerNumber = minerNumber;
+        }
+
+        List<String> getMessages() {
+            return messages;
         }
 
         @Override
         public String toString() {
+            String blockData;
+
+            if (messages.isEmpty()) {
+                blockData = "Block data: no messages";
+            } else {
+                blockData = "Block data:\n" + String.join("\n", messages);
+            }
+
             return String.format("Block:%n" +
                     "Created by miner # %d%n" +
                     "Id: %d%n" +
@@ -55,45 +77,53 @@ public final class Blockchain implements Serializable {
                     "%s%n" +
                     "Hash of the block:%n" +
                     "%s%n" +
+                    "%s%n" +
                     "Block was generating for %d seconds",
-                    minerNumber, id, timestamp, magicNumber, previousHash, hash, timeGenerating);
+                    minerNumber, id, timestamp, magicNumber, previousHash, hash, blockData, timeGenerating);
         }
     }
 
-    private static final long serialVersionUID = 2L;
+    private static final long serialVersionUID = 3L;
     private final List<Block> chain = new ArrayList<>();
     private int numberOfZeros = 0;
+    private final List<String> pendingMessages = new ArrayList<>();
 
-    synchronized int getNumberOfZeros() {
+    int getNumberOfZeros() {
         return numberOfZeros;
     }
 
-    void setNumberOfZeros(int numberOfZeros) {
-        if (numberOfZeros < 0) {
-            System.out.println("Number of zeros cannot be negative; using 0");
-            numberOfZeros = 0;
-        }
-
-        this.numberOfZeros = numberOfZeros;
-    }
-
-    void incrementNumberOfZeros() {
+    synchronized void incrementNumberOfZeros() {
         numberOfZeros++;
     }
 
-    void decrementNumberOfZeros() {
+    synchronized void decrementNumberOfZeros() {
         numberOfZeros = Math.max(0, --numberOfZeros);
+    }
+
+    synchronized List<String> getAndClearPendingMessages() {
+        List<String> messages = new ArrayList<>(pendingMessages);
+        pendingMessages.clear();
+
+        return messages;
+    }
+
+    synchronized void addToPendingMessages(String message) {
+        pendingMessages.add(message);
+    }
+
+    boolean isPendingMessages() {
+        return !pendingMessages.isEmpty();
     }
 
     int getSize() {
         return chain.size();
     }
 
-    void addBlockToChain(Block block) {
+    synchronized void addBlockToChain(Block block) {
         chain.add(block);
     }
 
-    Block getLastBlock() {
+    synchronized Block getLastBlock() {
         return chain.get(chain.size() - 1);
     }
 
@@ -105,28 +135,11 @@ public final class Blockchain implements Serializable {
         return chain.isEmpty() ? 1 : getLastBlock().getId() + 1;
     }
 
-    boolean validate() {
-        if (chain.isEmpty()) {
-            return true;
-        }
-
-        for (int index = chain.size() - 1; index >= 0; index--) {
-            if (index == 0) {
-                return "0".equals(chain.get(0).getPreviousHash());
-            } else if (!chain.get(index - 1).getHash().equals(chain.get(index).getPreviousHash())) {
-                return false;
-            }
-        }
-
-        return true; // should never get here, non-empty lists have a zero index
+    synchronized long getLastTimestamp() {
+        return getLastBlock().getTimestamp();
     }
 
     void printFirst(int noOfBlocks) {
         chain.stream().limit(noOfBlocks).forEach(System.out::println);
     }
-
-    void printAll() {
-        chain.forEach(System.out::println);
-    }
-
 }

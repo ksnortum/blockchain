@@ -1,39 +1,52 @@
 package blockchain;
 
 import java.security.SecureRandom;
-import java.util.Date;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 
-public class MiningTask implements Callable<Blockchain.Block> {
+/**
+ * Creates a magic number and hash for the last (current) block in the chain, and
+ * returns a @{link MiningTaskRecord} with the calculated data.
+ */
+public class MiningTask implements Callable<Optional<MiningTaskRecord>> {
     private final Blockchain blockchain;
     private long magicNumber;
     private String hash;
 
-    MiningTask(Blockchain blockchain) {
+    public MiningTask(Blockchain blockchain) {
         this.blockchain = blockchain;
     }
 
     @Override
-    public Blockchain.Block call() {
-        String previousHash = blockchain.getLastHash();
+    public Optional<MiningTaskRecord> call() {
+
+        // Get data from last block needed to create magic number and hash
         long id = blockchain.getNextId();
-        long timestamp = new Date().getTime();
+        long timestamp = blockchain.getLastTimestamp();
+        String previousHash = blockchain.getLastHash();
+
+        // Start the process of creating a magic number and hash
         long startTime = System.currentTimeMillis();
-        createHashWithNumberOfZeros(id, timestamp, previousHash, blockchain.getNumberOfZeros());
+        createHashWithNumberOfZeros(id, timestamp, previousHash, blockchain);
+
+        if (Thread.currentThread().isInterrupted()) {
+            return Optional.empty();
+        }
+
         long timeGenerating = (System.currentTimeMillis() - startTime) / 1000;
 
-        return new Blockchain.Block(id, timestamp, magicNumber, previousHash, hash, timeGenerating,
-                Thread.currentThread().getId());
+        return Optional.of(new MiningTaskRecord(magicNumber, hash, timeGenerating, Thread.currentThread().getId()));
     }
 
-    private void createHashWithNumberOfZeros(long id, long timestamp, String previousHash, int numberOfZeros) {
-        String stringToHash = "" + id + timestamp + previousHash;
+    private void createHashWithNumberOfZeros(long id, long timestamp, String previousHash, Blockchain blockchain) {
+        String stringToHash = "" + id + timestamp + previousHash +
+                String.join("", blockchain.getLastBlock().getMessages());
         SecureRandom random = new SecureRandom();
 
         do {
             magicNumber = random.nextLong();
             hash = StringUtil.applySha256(stringToHash + magicNumber);
-        } while (!StringUtil.doesStringStartWithNumberOfZeros(hash, numberOfZeros));
+        } while (!StringUtil.doesStringStartWithNumberOfZeros(hash, blockchain.getNumberOfZeros()) &&
+                !Thread.currentThread().isInterrupted());
     }
-
 }
