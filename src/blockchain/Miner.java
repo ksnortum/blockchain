@@ -1,5 +1,7 @@
 package blockchain;
 
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -12,11 +14,12 @@ public class Miner {
     private static final int AWAIT_TERMINATION_TIMEOUT = 800;
     private static final int FUTURE_GET_TIMEOUT = 100;
     private static final long MILLISECONDS_TO_WAIT_FOR_PENDING_MESSAGES = 300;
+    private static final String FILE_NAME = "blockchain.bin";
 
     private Blockchain blockchain;
 
     public void run() {
-        blockchain = new Blockchain();
+        blockchain = loadFromFile();
         createFirstBlock();
         ExecutorService executorService = Executors.newFixedThreadPool(NUMBER_OF_TASKS);
         executorService.execute(new UserMessageTask(blockchain));
@@ -41,7 +44,20 @@ public class Miner {
         }
 
         shutdownExecutor(executorService);
+        saveToFile();
         blockchain.printFirstNBlocks(MINIMUM_CHAIN_SIZE);
+    }
+
+    private Blockchain loadFromFile() {
+         if (Files.exists(Paths.get(FILE_NAME))) {
+             return (Blockchain) SerializationUtils.deserialize(FILE_NAME);
+         } else {
+             return new Blockchain();
+         }
+    }
+
+    private void saveToFile() {
+        SerializationUtils.serialize(blockchain, FILE_NAME);
     }
 
     private void createFirstBlock() {
