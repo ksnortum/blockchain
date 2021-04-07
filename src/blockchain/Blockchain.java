@@ -17,6 +17,7 @@ public final class Blockchain implements Serializable {
         private long timeGenerating;
         private long minerNumber;
         private final List<String> messages;
+        private String changeNMessage;
 
         Block(long id, long timestamp, String previousHash, String hash, List<String> messages) {
             this.id = id;
@@ -42,6 +43,10 @@ public final class Blockchain implements Serializable {
             return previousHash;
         }
 
+        List<String> getMessages() {
+            return messages;
+        }
+
         void setTimeGenerating(long timeGenerating) {
             this.timeGenerating = timeGenerating;
         }
@@ -54,8 +59,8 @@ public final class Blockchain implements Serializable {
             this.minerNumber = minerNumber;
         }
 
-        List<String> getMessages() {
-            return messages;
+        void setChangeNMessage(String changeNMessage) {
+            this.changeNMessage = changeNMessage;
         }
 
         @Override
@@ -78,8 +83,10 @@ public final class Blockchain implements Serializable {
                     "Hash of the block:%n" +
                     "%s%n" +
                     "%s%n" +
-                    "Block was generating for %d seconds",
-                    minerNumber, id, timestamp, magicNumber, previousHash, hash, blockData, timeGenerating);
+                    "Block was generating for %d seconds%n" +
+                    "%s%n",
+                    minerNumber, id, timestamp, magicNumber, previousHash, hash, blockData, timeGenerating,
+                    changeNMessage);
         }
     }
 
@@ -139,7 +146,11 @@ public final class Blockchain implements Serializable {
         return getLastBlock().getTimestamp();
     }
 
-    void printFirst(int noOfBlocks) {
+    synchronized void setLastChangeNMessage(String changeNMessage) {
+        getLastBlock().setChangeNMessage(changeNMessage);
+    }
+
+    void printFirstNBlocks(int noOfBlocks) {
         chain.stream().limit(noOfBlocks).forEach(System.out::println);
     }
 }

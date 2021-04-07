@@ -41,6 +41,7 @@ public class Miner {
         }
 
         shutdownExecutor(executorService);
+        blockchain.printFirstNBlocks(MINIMUM_CHAIN_SIZE);
     }
 
     private void createFirstBlock() {
@@ -124,18 +125,17 @@ public class Miner {
             return false;
         }
 
-        createAndPrintLastBlock(record);
+        createLastBlock(record);
         adjustNumberOfZeros(record);
 
         return true;
     }
 
-    private void createAndPrintLastBlock(MiningTaskRecord record) {
+    private void createLastBlock(MiningTaskRecord record) {
         Blockchain.Block lastBlock = blockchain.getLastBlock();
         lastBlock.setMagicNumber(record.getMagicNumber());
         lastBlock.setTimeGenerating(record.getTimeGenerating());
         lastBlock.setMinerNumber(record.getMinerNumber());
-        System.out.println(lastBlock);
     }
 
     private void adjustNumberOfZeros(MiningTaskRecord record) {
@@ -143,15 +143,13 @@ public class Miner {
 
         if (secondsGenerating > 60) {
             blockchain.decrementNumberOfZeros();
-            System.out.println("N was decreased by 1");
+            blockchain.setLastChangeNMessage("N was decreased by 1");
         } else if (secondsGenerating < 6) {
             blockchain.incrementNumberOfZeros();
-            System.out.println("N was increased to " + blockchain.getNumberOfZeros());
+            blockchain.setLastChangeNMessage("N was increased to " + blockchain.getNumberOfZeros());
         } else {
-            System.out.println("N stays the same");
+            blockchain.setLastChangeNMessage("N stays the same");
         }
-
-        System.out.println();
     }
 
     private void stopAllTasks(List<Future<Optional<MiningTaskRecord>>> futures) {
