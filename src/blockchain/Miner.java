@@ -23,6 +23,30 @@ public class Miner {
         createFirstBlock();
         ExecutorService executorService = Executors.newFixedThreadPool(NUMBER_OF_TASKS);
         executorService.execute(new UserMessageTask(blockchain));
+        startMinersAndProcess(executorService);
+        shutdownExecutor(executorService);
+
+        if (blockchain.validate()) {
+            saveToFile();
+            blockchain.printFirstNBlocks(MINIMUM_CHAIN_SIZE);
+        } else {
+            System.out.println("Blockchain did not validate");
+        }
+    }
+
+    private Blockchain loadFromFile() {
+         if (Files.exists(Paths.get(FILE_NAME))) {
+             return (Blockchain) SerializationUtils.deserialize(FILE_NAME);
+         } else {
+             return new Blockchain();
+         }
+    }
+
+    private void saveToFile() {
+        SerializationUtils.serialize(blockchain, FILE_NAME);
+    }
+
+    private void startMinersAndProcess(ExecutorService executorService) {
         List<Callable<Optional<MiningTaskRecord>>> callableTasks = new ArrayList<>();
 
         for (int i = 0; i < NUMBER_OF_TASKS; i++) {
@@ -42,22 +66,6 @@ public class Miner {
             stopAllTasks(futures);
             createNextBlock();
         }
-
-        shutdownExecutor(executorService);
-        saveToFile();
-        blockchain.printFirstNBlocks(MINIMUM_CHAIN_SIZE);
-    }
-
-    private Blockchain loadFromFile() {
-         if (Files.exists(Paths.get(FILE_NAME))) {
-             return (Blockchain) SerializationUtils.deserialize(FILE_NAME);
-         } else {
-             return new Blockchain();
-         }
-    }
-
-    private void saveToFile() {
-        SerializationUtils.serialize(blockchain, FILE_NAME);
     }
 
     private void createFirstBlock() {

@@ -153,4 +153,31 @@ public final class Blockchain implements Serializable {
     void printFirstNBlocks(int noOfBlocks) {
         chain.stream().limit(noOfBlocks).forEach(System.out::println);
     }
+
+    boolean validate() {
+        for (int i = chain.size() - 1; i >= 0; i--) {
+            Block currentBlock = chain.get(i);
+            String checkHash = StringUtil.applySha256(String.format("%s%s%s%s",
+                    currentBlock.getId(), currentBlock.getTimestamp(), currentBlock.getPreviousHash(),
+                    currentBlock.getMessages()));
+
+            if (!currentBlock.getHash().equals(checkHash)) {
+                return false;
+            }
+
+            if (i == 0) {
+                if (!"0".equals(currentBlock.getPreviousHash())) {
+                    return false;
+                }
+            } else {
+                Block previousBlock = chain.get(i - 1);
+
+                if (!previousBlock.getHash().equals(currentBlock.getPreviousHash())) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
 }
