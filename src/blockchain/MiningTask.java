@@ -20,14 +20,9 @@ public class MiningTask implements Callable<Optional<MiningTaskRecord>> {
     @Override
     public Optional<MiningTaskRecord> call() {
 
-        // Get data from last block needed to create magic number and hash
-        long id = blockchain.getNextId();
-        long timestamp = blockchain.getLastTimestamp();
-        String previousHash = blockchain.getLastHash();
-
-        // Start the process of creating a magic number and hash
+        // creating a magic number and hash
         long startTime = System.currentTimeMillis();
-        createHashWithNumberOfZeros(id, timestamp, previousHash, blockchain);
+        createHashWithNumberOfZeros(blockchain);
 
         if (Thread.currentThread().isInterrupted()) {
             return Optional.empty();
@@ -38,9 +33,9 @@ public class MiningTask implements Callable<Optional<MiningTaskRecord>> {
         return Optional.of(new MiningTaskRecord(magicNumber, hash, timeGenerating, Thread.currentThread().getId()));
     }
 
-    private void createHashWithNumberOfZeros(long id, long timestamp, String previousHash, Blockchain blockchain) {
-        String stringToHash = "" + id + timestamp + previousHash +
-                String.join("", blockchain.getLastBlock().getMessages());
+    private void createHashWithNumberOfZeros(Blockchain blockchain) {
+        String stringToHash = String.format("%s%s%s%s", blockchain.getLastId(), blockchain.getLastTimestamp(),
+                blockchain.getLastPreviousHash(), blockchain.getLastMessages());
         SecureRandom random = new SecureRandom();
 
         do {

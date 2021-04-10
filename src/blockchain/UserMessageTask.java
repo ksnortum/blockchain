@@ -29,14 +29,14 @@ public class UserMessageTask implements Runnable {
 
     @Override
     public void run() {
-        for (String message : predefinedMessages) {
+        for (String text : predefinedMessages) {
             try {
                 TimeUnit.MILLISECONDS.sleep(MILLISECONDS_BETWEEN_MESSAGES);
             } catch (InterruptedException e) {
                 return;
             }
 
-            blockchain.addToPendingMessages(message);
+            blockchain.addToPendingMessages(new Message(text, blockchain.getNextMessageId()));
         }
     }
 }

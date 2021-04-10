@@ -19,7 +19,10 @@ public class Miner {
     private Blockchain blockchain;
 
     public void run() {
-        blockchain = loadFromFile();
+        //blockchain = loadFromFile();
+        blockchain = new Blockchain();
+        SecurityKeyPair keyPair = new SecurityKeyPair();
+        keyPair.writeKeyPairToFiles();
         createFirstBlock();
         ExecutorService executorService = Executors.newFixedThreadPool(NUMBER_OF_TASKS);
         executorService.execute(new UserMessageTask(blockchain));
@@ -27,7 +30,7 @@ public class Miner {
         shutdownExecutor(executorService);
 
         if (blockchain.validate()) {
-            saveToFile();
+            //saveToFile();
             blockchain.printFirstNBlocks(MINIMUM_CHAIN_SIZE);
         } else {
             System.out.println("Blockchain did not validate");
@@ -49,30 +52,44 @@ public class Miner {
     private void startMinersAndProcess(ExecutorService executorService) {
         List<Callable<Optional<MiningTaskRecord>>> callableTasks = new ArrayList<>();
 
-        for (int i = 0; i < NUMBER_OF_TASKS; i++) {
+        for (int i = 0; i < NUMBER_OF_TASKS - 1; i++) {
             callableTasks.add(new MiningTask(blockchain));
         }
 
-        while (blockchain.getSize() <= MINIMUM_CHAIN_SIZE) {
-            List<Future<Optional<MiningTaskRecord>>> futures;
+        if (!startMinersAndUpdateBlock(executorService, callableTasks)) {
+            return;
+        }
 
-            try {
-                futures = executorService.invokeAll(callableTasks);
-            } catch (InterruptedException e) {
+        while (blockchain.getSize() < MINIMUM_CHAIN_SIZE) {
+            createNextBlock();
+
+            if (!startMinersAndUpdateBlock(executorService, callableTasks)) {
                 break;
             }
-
-            findFirstTaskWithValidData(futures);
-            stopAllTasks(futures);
-            createNextBlock();
         }
+    }
+
+    private boolean startMinersAndUpdateBlock(ExecutorService executorService,
+                                              List<Callable<Optional<MiningTaskRecord>>> callableTasks) {
+        List<Future<Optional<MiningTaskRecord>>> futures;
+
+        try {
+            futures = executorService.invokeAll(callableTasks);
+        } catch (InterruptedException e) {
+            return false;
+        }
+
+        findFirstTaskWithValidData(futures);
+        stopAllTasks(futures);
+
+        return true;
     }
 
     private void createFirstBlock() {
         long id = 1;
         long timestamp = new Date().getTime();
         String previousHash = "0";
-        List<String> messages = new ArrayList<>();
+        List<Message> messages = new ArrayList<>();
         hashAndCreateBlock(id, timestamp, previousHash, messages);
     }
 
@@ -89,14 +106,13 @@ public class Miner {
             }
         }
 
-        List<String> messages = blockchain.getAndClearPendingMessages();
+        List<Message> messages = blockchain.getAndClearPendingMessages();
         hashAndCreateBlock(id, timestamp, previousHash, messages);
     }
 
-    private void hashAndCreateBlock(long id, long timestamp, String previousHash, List<String> messages) {
-        String hash = StringUtil.applySha256(String.format("%s%s%s%s", id, timestamp, previousHash, messages));
-        Blockchain.Block firstBlock = new Blockchain.Block(id, timestamp, previousHash, hash, messages);
-        blockchain.addBlockToChain(firstBlock);
+    private void hashAndCreateBlock(long id, long timestamp, String previousHash, List<Message> messages) {
+        Blockchain.Block block = new Blockchain.Block(id, timestamp, previousHash, messages);
+        blockchain.addBlockToChain(block);
     }
 
     private void shutdownExecutor(ExecutorService executorService) {
@@ -149,14 +165,15 @@ public class Miner {
             return false;
         }
 
-        createLastBlock(record);
+        updateLastBlock(record);
         adjustNumberOfZeros(record);
 
         return true;
     }
 
-    private void createLastBlock(MiningTaskRecord record) {
+    private void updateLastBlock(MiningTaskRecord record) {
         Blockchain.Block lastBlock = blockchain.getLastBlock();
+        lastBlock.setHash(record.getHash());
         lastBlock.setMagicNumber(record.getMagicNumber());
         lastBlock.setTimeGenerating(record.getTimeGenerating());
         lastBlock.setMinerNumber(record.getMinerNumber());

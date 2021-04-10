@@ -28,4 +28,10 @@ public class MiningTaskRecord {
     public long getMinerNumber() {
         return minerNumber;
     }
+
+    @Override
+    public String toString() {
+        return String.format("MiningTaskRecord{magic# = %d, hash = %s, time generating = %d, miner# = %d}",
+                magicNumber, hash, timeGenerating, minerNumber);
+    }
 }
