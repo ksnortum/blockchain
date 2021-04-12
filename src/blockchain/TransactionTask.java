@@ -73,7 +73,11 @@ public class TransactionTask implements Runnable {
                 break;
         }
 
-        int index = random.nextInt(receivers.size());
+        int index;
+
+        do {
+            index = random.nextInt(receivers.size());
+        } while (receivers.get(index).getName().equals(sender.getName()));
 
         return receivers.get(index);
     }
