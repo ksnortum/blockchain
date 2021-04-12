@@ -8,34 +8,46 @@ import java.security.*;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 
-public class Message implements Serializable {
+public class Transaction implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private final String text;
     private final long id;
+    private final Entity sender;
+    private final Entity receiver;
+    private final int amount;
     private byte[] signature;
 
-    public Message(String text, long id) {
-        this.text = text;
+    public Transaction(long id, Entity sender, Entity receiver, int amount) {
         this.id = id;
-        signMessage();
-    }
-
-    public String getText() {
-        return text;
+        this.sender = sender;
+        this.receiver = receiver;
+        this.amount = amount;
+        signTransaction();
     }
 
     public long getId() {
         return id;
     }
 
+    public Entity getSender() {
+        return sender;
+    }
+
+    public Entity getReceiver() {
+        return receiver;
+    }
+
+    public int getAmount() {
+        return amount;
+    }
+
     public byte[] getSignature() {
         return signature;
     }
 
-    private void signMessage() {
-        String data = text + id;
+    private void signTransaction() {
+        String data = String.format("%d%s%s%d", id, sender.getName(), receiver.getName(), amount);
 
         try {
             Signature rsa = Signature.getInstance(SecurityKeyPair.SIGNATURE_ALGORITHM);
@@ -61,6 +73,7 @@ public class Message implements Serializable {
 
     @Override
     public String toString() {
-        return String.format("Message{text = %s, id = %d}", text, id);
+        return String.format("Transaction{id = %s, sender = %s, receiver = %s, amount = %d}",
+                id, sender.getName(), receiver.getName(), amount);
     }
 }

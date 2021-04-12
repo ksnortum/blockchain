@@ -4,13 +4,13 @@ public class MiningTaskRecord {
     private final long magicNumber;
     private final String hash;
     private final long timeGenerating;
-    private final long minerNumber;
+    private final Entity miner;
 
-    public MiningTaskRecord(long magicNumber, String hash, long timeGenerating, long minerNumber) {
+    public MiningTaskRecord(long magicNumber, String hash, long timeGenerating, Entity miner) {
         this.magicNumber = magicNumber;
         this.hash = hash;
         this.timeGenerating = timeGenerating;
-        this.minerNumber = minerNumber;
+        this.miner = miner;
     }
 
     public long getMagicNumber() {
@@ -25,13 +25,13 @@ public class MiningTaskRecord {
         return timeGenerating;
     }
 
-    public long getMinerNumber() {
-        return minerNumber;
+    public Entity getMiner() {
+        return miner;
     }
 
     @Override
     public String toString() {
-        return String.format("MiningTaskRecord{magic# = %d, hash = %s, time generating = %d, miner# = %d}",
-                magicNumber, hash, timeGenerating, minerNumber);
+        return String.format("MiningTaskRecord{magic# = %d, hash = %s, time generating = %d, miner = %s}",
+                magicNumber, hash, timeGenerating, miner);
     }
 }

@@ -2,18 +2,17 @@ package blockchain;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.*;
 
 public class Miner {
     private static final int NUMBER_OF_TASKS = Runtime.getRuntime().availableProcessors();
-    private static final int MINIMUM_CHAIN_SIZE = 5;
+    private static final int MINIMUM_CHAIN_SIZE = 15;
     private static final int AWAIT_TERMINATION_TIMEOUT = 800;
     private static final int FUTURE_GET_TIMEOUT = 100;
     private static final long MILLISECONDS_TO_WAIT_FOR_PENDING_MESSAGES = 300;
+    private static final int DECREMENT_AFTER_SECONDS = 1;
+    private static final int INCREMENT_AFTER_SECONDS = 0;
     private static final String FILE_NAME = "blockchain.bin";
 
     private Blockchain blockchain;
@@ -23,9 +22,8 @@ public class Miner {
         blockchain = new Blockchain();
         SecurityKeyPair keyPair = new SecurityKeyPair();
         keyPair.writeKeyPairToFiles();
-        createFirstBlock();
         ExecutorService executorService = Executors.newFixedThreadPool(NUMBER_OF_TASKS);
-        executorService.execute(new UserMessageTask(blockchain));
+        executorService.execute(new TransactionTask(blockchain));
         startMinersAndProcess(executorService);
         shutdownExecutor(executorService);
 
@@ -55,6 +53,8 @@ public class Miner {
         for (int i = 0; i < NUMBER_OF_TASKS - 1; i++) {
             callableTasks.add(new MiningTask(blockchain));
         }
+
+        createFirstBlock();
 
         if (!startMinersAndUpdateBlock(executorService, callableTasks)) {
             return;
@@ -89,8 +89,8 @@ public class Miner {
         long id = 1;
         long timestamp = new Date().getTime();
         String previousHash = "0";
-        List<Message> messages = new ArrayList<>();
-        hashAndCreateBlock(id, timestamp, previousHash, messages);
+        List<Transaction> transactions = new ArrayList<>();
+        hashAndCreateBlock(id, timestamp, previousHash, transactions);
     }
 
     private void createNextBlock() {
@@ -98,7 +98,7 @@ public class Miner {
         long timestamp = new Date().getTime();
         String previousHash = blockchain.getLastHash();
 
-        while (!blockchain.isPendingMessages()) {
+        while (!blockchain.isPendingTransactions()) {
             try {
                 TimeUnit.MILLISECONDS.sleep(MILLISECONDS_TO_WAIT_FOR_PENDING_MESSAGES);
             } catch (InterruptedException e) {
@@ -106,12 +106,12 @@ public class Miner {
             }
         }
 
-        List<Message> messages = blockchain.getAndClearPendingMessages();
-        hashAndCreateBlock(id, timestamp, previousHash, messages);
+        List<Transaction> transactions = blockchain.getAndClearPendingTransactions();
+        hashAndCreateBlock(id, timestamp, previousHash, transactions);
     }
 
-    private void hashAndCreateBlock(long id, long timestamp, String previousHash, List<Message> messages) {
-        Blockchain.Block block = new Blockchain.Block(id, timestamp, previousHash, messages);
+    private void hashAndCreateBlock(long id, long timestamp, String previousHash, List<Transaction> transactions) {
+        Blockchain.Block block = new Blockchain.Block(id, timestamp, previousHash, transactions);
         blockchain.addBlockToChain(block);
     }
 
@@ -176,16 +176,19 @@ public class Miner {
         lastBlock.setHash(record.getHash());
         lastBlock.setMagicNumber(record.getMagicNumber());
         lastBlock.setTimeGenerating(record.getTimeGenerating());
-        lastBlock.setMinerNumber(record.getMinerNumber());
+        Entity miner = record.getMiner();
+        lastBlock.setMiner(miner);
+        lastBlock.setMinerAward(String.format(Blockchain.MINER_AWARD_FORMAT,
+                miner.getName(), Blockchain.AWARD_AMOUNT));
     }
 
     private void adjustNumberOfZeros(MiningTaskRecord record) {
         long secondsGenerating = record.getTimeGenerating();
 
-        if (secondsGenerating > 60) {
+        if (secondsGenerating > DECREMENT_AFTER_SECONDS) {
             blockchain.decrementNumberOfZeros();
             blockchain.setLastChangeNMessage("N was decreased by 1");
-        } else if (secondsGenerating < 6) {
+        } else if (secondsGenerating < INCREMENT_AFTER_SECONDS) {
             blockchain.incrementNumberOfZeros();
             blockchain.setLastChangeNMessage("N was increased to " + blockchain.getNumberOfZeros());
         } else {

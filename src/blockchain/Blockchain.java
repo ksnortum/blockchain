@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 public final class Blockchain implements Serializable {
 
     static final class Block implements Serializable {
-        private static final long serialVersionUID = 4L;
+        private static final long serialVersionUID = 5L;
 
         private final long id;
         private final long timestamp;
@@ -23,15 +23,16 @@ public final class Blockchain implements Serializable {
         private final String previousHash;
         private String hash;
         private long timeGenerating;
-        private long minerNumber;
-        private final List<Message> messages;
+        private final List<Transaction> transactions;
         private String changeNMessage;
+        private Entity miner;
+        private String minerAward;
 
-        Block(long id, long timestamp, String previousHash, List<Message> messages) {
+        Block(long id, long timestamp, String previousHash, List<Transaction> transactions) {
             this.id = id;
             this.timestamp = timestamp;
             this.previousHash = previousHash;
-            this.messages = messages;
+            this.transactions = transactions;
         }
 
         long getId() {
@@ -54,8 +55,16 @@ public final class Blockchain implements Serializable {
             return previousHash;
         }
 
-        List<Message> getMessages() {
-            return messages;
+        List<Transaction> getTransactions() {
+            return transactions;
+        }
+
+        Entity getMiner() {
+            return miner;
+        }
+
+        String getMinerAward() {
+            return minerAward;
         }
 
         void setHash(String hash) {
@@ -70,28 +79,34 @@ public final class Blockchain implements Serializable {
             this.magicNumber = magicNumber;
         }
 
-        void setMinerNumber(long minerNumber) {
-            this.minerNumber = minerNumber;
-        }
-
         void setChangeNMessage(String changeNMessage) {
             this.changeNMessage = changeNMessage;
         }
 
+        void setMiner(Entity miner) {
+            this.miner = miner;
+        }
+
+        void setMinerAward(String minerAward) {
+            this.minerAward = minerAward;
+        }
+
         @Override
         public String toString() {
-            String blockData;
+            String transactionString;
 
-            if (messages.isEmpty()) {
-                blockData = "Block data: no messages";
+            if (transactions.isEmpty()) {
+                transactionString = "No transactions";
             } else {
-                blockData = "Block data:\n" + messages.stream()
-                        .map(Message::getText)
+                transactionString = transactions.stream()
+                        .map(t -> String.format("%s sent %d VC to %s",
+                                t.getSender().getName(), t.getAmount(), t.getReceiver().getName()))
                         .collect(Collectors.joining("\n"));
             }
 
             return String.format("Block:%n" +
-                    "Created by miner # %d%n" +
+                    "Created by: %s%n" +
+                    "%s%n" +
                     "Id: %d%n" +
                     "Timestamp: %d%n" +
                     "Magic number: %d%n" +
@@ -99,21 +114,26 @@ public final class Blockchain implements Serializable {
                     "%s%n" +
                     "Hash of the block:%n" +
                     "%s%n" +
+                    "Block data:%n" +
                     "%s%n" +
                     "Block was generating for %d seconds%n" +
                     "%s%n",
-                    minerNumber, id, timestamp, magicNumber, previousHash, hash, blockData, timeGenerating,
-                    changeNMessage);
+                    miner == null ? "no name" : miner.getName(), minerAward, id, timestamp, magicNumber,
+                    previousHash, hash, transactionString, timeGenerating, changeNMessage);
         }
     }
 
     private static final long serialVersionUID = 4L;
+    public static final String MINER_AWARD_FORMAT = "%s gets %d VC";
+    public static final int AWARD_AMOUNT = 100;
+
     private final List<Block> chain = new ArrayList<>();
     private int numberOfZeros = 0;
-    private final List<Message> pendingMessages = new ArrayList<>();
-    private final AtomicLong newMessageId = new AtomicLong(1);
-    private long currentValidMessageId = Long.MAX_VALUE;
+    private final List<Transaction> pendingTransactions = new ArrayList<>();
+    private final AtomicLong newTransactionId = new AtomicLong(1);
+    private long currentValidTransactionId = Long.MAX_VALUE;
     private PublicKey publicKey;
+    private final List<Entity> entities = loadEntities();
 
     int getNumberOfZeros() {
         return numberOfZeros;
@@ -127,19 +147,19 @@ public final class Blockchain implements Serializable {
         numberOfZeros = Math.max(0, --numberOfZeros);
     }
 
-    synchronized List<Message> getAndClearPendingMessages() {
-        List<Message> messages = new ArrayList<>(pendingMessages);
-        pendingMessages.clear();
+    synchronized List<Transaction> getAndClearPendingTransactions() {
+        List<Transaction> transactions = new ArrayList<>(pendingTransactions);
+        pendingTransactions.clear();
 
-        return messages;
+        return transactions;
     }
 
-    synchronized void addToPendingMessages(Message message) {
-        pendingMessages.add(message);
+    synchronized void addToPendingTransactions(Transaction transaction) {
+        pendingTransactions.add(transaction);
     }
 
-    boolean isPendingMessages() {
-        return !pendingMessages.isEmpty();
+    boolean isPendingTransactions() {
+        return !pendingTransactions.isEmpty();
     }
 
     int getSize() {
@@ -174,8 +194,8 @@ public final class Blockchain implements Serializable {
         return getLastBlock().getTimestamp();
     }
 
-    synchronized List<Message> getLastMessages() {
-        return getLastBlock().getMessages();
+    synchronized List<Transaction> getLastTransactions() {
+        return getLastBlock().getTransactions();
     }
 
     synchronized void setLastChangeNMessage(String changeNMessage) {
@@ -191,9 +211,9 @@ public final class Blockchain implements Serializable {
 
         for (int i = chain.size() - 1; i >= 0; i--) {
             Block currentBlock = chain.get(i);
-            String stringToHash = String.format("%s%s%s%s%s",
+            String stringToHash = String.format("%s%s%s%s%s%d",
                     currentBlock.getId(), currentBlock.getTimestamp(), currentBlock.getPreviousHash(),
-                    currentBlock.getMessages(), currentBlock.getMagicNumber());
+                    currentBlock.getTransactions(), currentBlock.getMinerAward(), currentBlock.getMagicNumber());
             String checkHash = StringUtil.applySha256(stringToHash);
 
             if (!currentBlock.getHash().equals(checkHash)) {
@@ -213,10 +233,10 @@ public final class Blockchain implements Serializable {
                     return false;
                 }
 
-                boolean messagesValid = validateMessage(currentBlock.getMessages());
+                boolean transactionsValid = validateTransactions(currentBlock.getTransactions());
 
-                if (!messagesValid) {
-                    System.out.println("Message did not validate");
+                if (!transactionsValid) {
+                    System.out.println("Transactions did not validate");
                     return false;
                 }
             }
@@ -225,21 +245,23 @@ public final class Blockchain implements Serializable {
         return true;
     }
 
-    private boolean validateMessage(List<Message> messages) {
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            Message message = messages.get(i);
+    private boolean validateTransactions(List<Transaction> transactions) {
+        for (int i = transactions.size() - 1; i >= 0; i--) {
+            Transaction transaction = transactions.get(i);
 
             // check that message ID increases (tricky, cuz we're going backwards)
-            if (message.getId() >= currentValidMessageId) {
-                System.out.println("Message ID does not increase");
+            if (transaction.getId() >= currentValidTransactionId) {
+                System.out.println("Transaction ID does not increase");
                 return false;
             }
 
-            currentValidMessageId = message.getId();
+            currentValidTransactionId = transaction.getId();
 
             // check that signature is valid
-            if (!verifySignature(message.getText() + message.getId(), message.getSignature())) {
-                System.out.println("Message signature is not valid");
+            String data = String.format("%d%s%s%d", transaction.getId(), transaction.getSender().getName(),
+                    transaction.getReceiver().getName(), transaction.getAmount());
+            if (!verifySignature(data, transaction.getSignature())) {
+                System.out.println("Transaction signature is not valid");
                 return false;
             }
         }
@@ -271,7 +293,29 @@ public final class Blockchain implements Serializable {
         }
     }
 
-    long getNextMessageId() {
-        return newMessageId.getAndIncrement();
+    long getNextTransactionId() {
+        return newTransactionId.getAndIncrement();
+    }
+
+    private List<Entity> loadEntities() {
+        List<Entity> entities = new ArrayList<>();
+        entities.add(new Entity("miner1", Entity.Type.MINER, 100));
+        entities.add(new Entity("miner2", Entity.Type.MINER, 100));
+        entities.add(new Entity("miner3", Entity.Type.MINER, 100));
+        entities.add(new Entity("Nick", Entity.Type.PERSON, 0));
+        entities.add(new Entity("Ben", Entity.Type.PERSON, 0));
+        entities.add(new Entity("Kim", Entity.Type.PERSON, 0));
+        entities.add(new Entity("Walmart", Entity.Type.COMPANY, 0));
+        entities.add(new Entity("BiMart", Entity.Type.COMPANY, 0));
+        entities.add(new Entity("Safeway", Entity.Type.COMPANY, 0));
+        entities.add(new Entity("Worker1", Entity.Type.EMPLOYEE, 0));
+        entities.add(new Entity("Worker2", Entity.Type.EMPLOYEE, 0));
+        entities.add(new Entity("Worker3", Entity.Type.EMPLOYEE, 0));
+
+        return entities;
+    }
+
+    public List<Entity> getEntities() {
+        return entities;
     }
 }
