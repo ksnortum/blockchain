@@ -1,5 +1,6 @@
 package blockchain;
 
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Date;
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.stream.Collectors;
  */
 public class MiningTask implements Callable<Optional<MiningTaskRecord>> {
 
+    private static final String SECURITY_ALGORITHM = "NativePRNG";
     private static final Random random = new Random(new Date().getTime());
 
     private final Blockchain blockchain;
@@ -46,10 +48,17 @@ public class MiningTask implements Callable<Optional<MiningTaskRecord>> {
                 blockchain.getLastId(), blockchain.getLastTimestamp(),
                 blockchain.getLastPreviousHash(), blockchain.getLastTransactions(),
                 miner.getName(), Blockchain.AWARD_AMOUNT);
-        SecureRandom random = new SecureRandom();
+        SecureRandom secureRandom;
+
+        try {
+            secureRandom = SecureRandom.getInstance(SECURITY_ALGORITHM);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            return;
+        }
 
         do {
-            magicNumber = random.nextLong();
+            magicNumber = secureRandom.nextLong();
             hash = StringUtil.applySha256(stringToHash + magicNumber);
         } while (!StringUtil.doesStringStartWithNumberOfZeros(hash, blockchain.getNumberOfZeros()) &&
                 !Thread.currentThread().isInterrupted());
