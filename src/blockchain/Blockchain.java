@@ -129,9 +129,9 @@ public final class Blockchain implements Serializable {
 
     private final List<Block> chain = new ArrayList<>();
     private int numberOfZeros = 0;
-    private final List<Transaction> pendingTransactions = new ArrayList<>();
-    private final AtomicLong newTransactionId = new AtomicLong(1);
-    private long currentValidTransactionId = Long.MAX_VALUE;
+    private transient List<Transaction> pendingTransactions = new ArrayList<>();
+    private final AtomicLong nextTransactionId = new AtomicLong(1);
+    private transient long currentValidTransactionId = Long.MAX_VALUE;
     private PublicKey publicKey;
     private final List<Entity> entities = loadEntities();
 
@@ -202,8 +202,8 @@ public final class Blockchain implements Serializable {
         getLastBlock().setChangeNMessage(changeNMessage);
     }
 
-    void printFirstNBlocks(int noOfBlocks) {
-        chain.stream().limit(noOfBlocks).forEach(System.out::println);
+    void printLastNBlocks(int noOfBlocks) {
+        chain.stream().skip(Math.max(0, chain.size() - noOfBlocks)).forEach(System.out::println);
     }
 
     boolean validate() {
@@ -251,7 +251,8 @@ public final class Blockchain implements Serializable {
 
             // check that message ID increases (tricky, cuz we're going backwards)
             if (transaction.getId() >= currentValidTransactionId) {
-                System.out.println("Transaction ID does not increase");
+                System.out.printf("Transaction ID does not increase, this ID = %d, current ID = %d%n",
+                        transaction.getId(), currentValidTransactionId);
                 return false;
             }
 
@@ -294,7 +295,23 @@ public final class Blockchain implements Serializable {
     }
 
     long getNextTransactionId() {
-        return newTransactionId.getAndIncrement();
+        return nextTransactionId.getAndIncrement();
+    }
+
+    synchronized void updateTransactionId() {
+        if (chain.size() < 2) {
+            nextTransactionId.set(1);
+            return;
+        }
+
+        List<Transaction> transactions = getLastBlock().getTransactions();
+        Transaction lastTransaction = transactions.get(Math.max(0, transactions.size() - 1));
+        nextTransactionId.set(lastTransaction.getId() + 1);
+        currentValidTransactionId = Long.MAX_VALUE;
+    }
+
+    synchronized void initializePendingTransactions() {
+        pendingTransactions = new ArrayList<>();
     }
 
     private List<Entity> loadEntities() {

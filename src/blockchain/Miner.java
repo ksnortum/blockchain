@@ -7,7 +7,7 @@ import java.util.concurrent.*;
 
 public class Miner {
     private static final int NUMBER_OF_TASKS = Runtime.getRuntime().availableProcessors();
-    private static final int MINIMUM_CHAIN_SIZE = 15;
+    private static final int NUMBER_OF_NEW_BLOCKS = 15;
     private static final int AWAIT_TERMINATION_TIMEOUT = 800;
     private static final int FUTURE_GET_TIMEOUT = 100;
     private static final long MILLISECONDS_TO_WAIT_FOR_PENDING_MESSAGES = 300;
@@ -18,26 +18,38 @@ public class Miner {
     private Blockchain blockchain;
 
     public void run() {
-        //blockchain = loadFromFile();
-        blockchain = new Blockchain();
-        SecurityKeyPair keyPair = new SecurityKeyPair();
-        keyPair.writeKeyPairToFiles();
+        setupSecurityKeyPair();
+        blockchain = loadFromFile();
         ExecutorService executorService = Executors.newFixedThreadPool(NUMBER_OF_TASKS);
         executorService.execute(new TransactionTask(blockchain));
         startMinersAndProcess(executorService);
         shutdownExecutor(executorService);
 
         if (blockchain.validate()) {
-            //saveToFile();
-            blockchain.printFirstNBlocks(MINIMUM_CHAIN_SIZE);
+            saveToFile();
+            blockchain.printLastNBlocks(NUMBER_OF_NEW_BLOCKS);
         } else {
             System.out.println("Blockchain did not validate");
         }
     }
 
+    private void setupSecurityKeyPair() {
+        boolean privateKeyExists = Files.exists(Paths.get(SecurityKeyPair.PATH_TO_PRIVATE_KEY));
+        boolean publicKeyExists = Files.exists(Paths.get(SecurityKeyPair.PATH_TO_PUBLIC_KEY));
+
+        if (!privateKeyExists || !publicKeyExists) {
+            SecurityKeyPair keyPair = new SecurityKeyPair();
+            keyPair.writeKeyPairToFiles();
+        }
+    }
+
     private Blockchain loadFromFile() {
          if (Files.exists(Paths.get(FILE_NAME))) {
-             return (Blockchain) SerializationUtils.deserialize(FILE_NAME);
+             Blockchain blockchain = (Blockchain) SerializationUtils.deserialize(FILE_NAME);
+             blockchain.updateTransactionId();
+             blockchain.initializePendingTransactions();
+
+             return blockchain;
          } else {
              return new Blockchain();
          }
@@ -54,14 +66,12 @@ public class Miner {
             callableTasks.add(new MiningTask(blockchain));
         }
 
-        createFirstBlock();
-
-        if (!startMinersAndUpdateBlock(executorService, callableTasks)) {
-            return;
-        }
-
-        while (blockchain.getSize() < MINIMUM_CHAIN_SIZE) {
-            createNextBlock();
+        for (int i = 0; i < NUMBER_OF_NEW_BLOCKS; i++) {
+            if (blockchain.getSize() == 0) {
+                createFirstBlock();
+            } else {
+                createNextBlock();
+            }
 
             if (!startMinersAndUpdateBlock(executorService, callableTasks)) {
                 break;
